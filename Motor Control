@@ -1,0 +1,114 @@
+#include <PID_v1.h>
+#include <Encoder.h>
+
+// PID parameters
+double Kp = 1.0, Ki = 1.0, Kd = 1.0;
+
+// Define global variables
+double errorA, errorB, errorC, errorD;
+double outputA, outputB, outputC, outputD;
+double setpointA, setpointB, setpointC, setpointD;
+
+// Define motor control pins
+const int dirA = 2, pwmA = 3;
+const int dirB = 4, pwmB = 5;
+const int dirC = 6, pwmC = 7;
+const int dirD = 8, pwmD = 9;
+
+// Define encoder pins
+const int motorAEncoderPin1 = 10, motorAEncoderPin2 = 11;
+const int motorBEncoderPin1 = 12, motorBEncoderPin2 = 13;
+const int motorCEncoderPin1 = 14, motorCEncoderPin2 = 15;
+const int motorDEncoderPin1 = 16, motorDEncoderPin2 = 17;
+
+// Create encoder objects
+Encoder encoderA(motorAEncoderPin1, motorAEncoderPin2);
+Encoder encoderB(motorBEncoderPin1, motorBEncoderPin2);
+Encoder encoderC(motorCEncoderPin1, motorCEncoderPin2);
+Encoder encoderD(motorDEncoderPin1, motorDEncoderPin2);
+
+long targetPulses = 1000;  // example target pulses
+
+// PID objects
+PID motorPIDA(&errorA, &outputA, &setpointA, Kp, Ki, Kd, DIRECT);
+PID motorPIDB(&errorB, &outputB, &setpointB, Kp, Ki, Kd, DIRECT);
+PID motorPIDC(&errorC, &outputC, &setpointC, Kp, Ki, Kd, DIRECT);
+PID motorPIDD(&errorD, &outputD, &setpointD, Kp, Ki, Kd, DIRECT);
+
+// Function prototypes
+void setMotorSpeed(int pwmPin, int dirPin, double speed);
+void calculateMotorSpeeds(long targetPulses, long pulsesA, long pulsesB, long pulsesC, long pulsesD);
+
+void setup() {
+    // Setup code here
+    Serial.begin(9600);
+
+    pinMode(dirA, OUTPUT);
+    pinMode(pwmA, OUTPUT);
+    pinMode(dirB, OUTPUT);
+    pinMode(pwmB, OUTPUT);
+    pinMode(dirC, OUTPUT);
+    pinMode(pwmC, OUTPUT);
+    pinMode(dirD, OUTPUT);
+    pinMode(pwmD, OUTPUT);
+
+    // Initialize PID controllers
+    motorPIDA.SetMode(AUTOMATIC);
+    motorPIDB.SetMode(AUTOMATIC);
+    motorPIDC.SetMode(AUTOMATIC);
+    motorPIDD.SetMode(AUTOMATIC);
+}
+
+void loop() {
+    long pulsesA = encoderA.read();
+    long pulsesB = encoderB.read();
+    long pulsesC = encoderC.read();
+    long pulsesD = encoderD.read();
+
+    if (pulsesA + pulsesB + pulsesC + pulsesD < targetPulses) {
+        calculateMotorSpeeds(targetPulses, pulsesA, pulsesB, pulsesC, pulsesD);
+    } else {
+        setMotorSpeed(pwmA, dirA, 0);
+        setMotorSpeed(pwmB, dirB, 0);
+        setMotorSpeed(pwmC, dirC, 0);
+        setMotorSpeed(pwmD, dirD, 0);
+    }
+
+    // Optionally, print encoder values for debugging
+    Serial.print("Pulses A: "); Serial.print(pulsesA);
+    Serial.print(" B: "); Serial.print(pulsesB);
+    Serial.print(" C: "); Serial.print(pulsesC);
+    Serial.print(" D: "); Serial.println(pulsesD);
+
+    delay(100); // Adjust delay as necessary
+}
+
+void setMotorSpeed(int pwmPin, int dirPin, double speed) {
+    // Ensure speed is within range
+    if (speed < 0) speed = 0;
+    if (speed > 255) speed = 255;
+
+    analogWrite(pwmPin, (int)speed);
+    // Set direction based on application needs
+    // Assuming HIGH for forward and LOW for reverse, modify if necessary
+    digitalWrite(dirPin, speed > 0 ? HIGH : LOW);
+}
+
+void calculateMotorSpeeds(long targetPulses, long pulsesA, long pulsesB, long pulsesC, long pulsesD) {
+    // Placeholder function to calculate motor speeds based on PID
+    // Adjust these calculations as necessary for your application
+    errorA = targetPulses - pulsesA;
+    errorB = targetPulses - pulsesB;
+    errorC = targetPulses - pulsesC;
+    errorD = targetPulses - pulsesD;
+
+    motorPIDA.Compute();
+    motorPIDB.Compute();
+    motorPIDC.Compute();
+    motorPIDD.Compute();
+
+    setMotorSpeed(pwmA, dirA, outputA);
+    setMotorSpeed(pwmB, dirB, outputB);
+    setMotorSpeed(pwmC, dirC, outputC);
+    setMotorSpeed(pwmD, dirD, outputD);
+}
