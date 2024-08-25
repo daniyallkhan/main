@@ -1,0 +1,377 @@
+
+To achieve your goals, we'll need to update the Arduino Mega code to calculate the distance covered using the encoders and provide a comprehensive Python script for the Raspberry Pi to handle navigation, obstacle avoidance, and pathfinding. We'll also include the distance calculation in the Arduino code.
+
+### Updated Arduino Mega Code
+
+This Arduino code controls four DC motors with encoders using PID control. It receives commands from the Raspberry Pi via Serial communication and moves in all directions while calculating the distance covered.
+
+Save the following code as `motor_control_pid.ino`:
+
+```cpp
+#include <Encoder.h>
+#include <PID_v1.h>
+
+// Motor pin definitions
+#define PWMA 12    
+#define DIRA1 34 
+#define DIRA2 35  
+#define PWMB 8    
+#define DIRB1 37 
+#define DIRB2 36  
+#define PWMC 6    
+#define DIRC1 43
+#define DIRC2 42  
+#define PWMD 5    
+#define DIRD1 A4  
+#define DIRD2 A5  
+
+// Encoder pin definitions
+#define ENCA1 18
+#define ENCB1 31
+#define ENCA2 19
+#define ENCB2 38
+#define ENCA3 3
+#define ENCB3 49
+#define ENCA4 2
+#define ENCB4 23
+
+// Constants
+const double wheelDiameter = 0.08; // meters
+const double wheelCircumference = wheelDiameter * 3.14159;
+const int motorReductionRatio = 30;
+const int pulsesPerRevolutionMotor = 11;
+const int pulsesPerRevolution = motorReductionRatio * pulsesPerRevolutionMotor * 4; // 4x for quadrature encoder
+const double distancePerPulse = wheelCircumference / pulsesPerRevolution;
+
+// Motor control variables
+double setpointA, inputA, outputA;
+double setpointB, inputB, outputB;
+double setpointC, inputC, outputC;
+double setpointD, inputD, outputD;
+double Kp = 2.0, Ki = 5.0, Kd = 1.0;
+PID pidA(&inputA, &outputA, &setpointA, Kp, Ki, Kd, DIRECT);
+PID pidB(&inputB, &outputB, &setpointB, Kp, Ki, Kd, DIRECT);
+PID pidC(&inputC, &outputC, &setpointC, Kp, Ki, Kd, DIRECT);
+PID pidD(&inputD, &outputD, &setpointD, Kp, Ki, Kd, DIRECT);
+
+// Encoder objects
+Encoder motorAEncoder(ENCA1, ENCB1);
+Encoder motorBEncoder(ENCA2, ENCB2);
+Encoder motorCEncoder(ENCA3, ENCB3);
+Encoder motorDEncoder(ENCA4, ENCB4);
+
+void setup() {
+  // Motor pins setup
+  pinMode(PWMA, OUTPUT);
+  pinMode(DIRA1, OUTPUT);
+  pinMode(DIRA2, OUTPUT);
+  pinMode(PWMB, OUTPUT);
+  pinMode(DIRB1, OUTPUT);
+  pinMode(DIRB2, OUTPUT);
+  pinMode(PWMC, OUTPUT);
+  pinMode(DIRC1, OUTPUT);
+  pinMode(DIRC2, OUTPUT);
+  pinMode(PWMD, OUTPUT);
+  pinMode(DIRD1, OUTPUT);
+  pinMode(DIRD2, OUTPUT);
+
+  // Initialize serial communication
+  Serial.begin(115200);
+
+  // Initialize PID
+  pidA.SetMode(AUTOMATIC);
+  pidB.SetMode(AUTOMATIC);
+  pidC.SetMode(AUTOMATIC);
+  pidD.SetMode(AUTOMATIC);
+
+  // Initialize setpoints
+  setpointA = 0;
+  setpointB = 0;
+  setpointC = 0;
+  setpointD = 0;
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    if (command == "MOVE_FORWARD") {
+      moveForward();
+    } else if (command == "MOVE_BACKWARD") {
+      moveBackward();
+    } else if (command == "MOVE_LEFT") {
+      moveLeft();
+    } else if (command == "MOVE_RIGHT") {
+      moveRight();
+    } else if (command == "TURN_LEFT") {
+      turnLeft();
+    } else if (command == "TURN_RIGHT") {
+      turnRight();
+    } else if (command == "STOP") {
+      stopMotors();
+    }
+  }
+
+  // Update encoder values
+  inputA = motorAEncoder.read();
+  inputB = motorBEncoder.read();
+  inputC = motorCEncoder.read();
+  inputD = motorDEncoder.read();
+
+  // Compute PID outputs
+  pidA.Compute();
+  pidB.Compute();
+  pidC.Compute();
+  pidD.Compute();
+
+  // Control motors with PID outputs
+  setMotorA(outputA);
+  setMotorB(outputB);
+  setMotorC(outputC);
+  setMotorD(outputD);
+
+  // Calculate and send the distance covered
+  double distanceCovered = calculateDistance();
+  Serial.print("DISTANCE_COVERED ");
+  Serial.println(distanceCovered);
+}
+
+void moveForward() {
+  setpointA = 1000;
+  setpointB = 1000;
+  setpointC = 1000;
+  setpointD = 1000;
+}
+
+void moveBackward() {
+  setpointA = -1000;
+  setpointB = -1000;
+  setpointC = -1000;
+  setpointD = -1000;
+}
+
+void moveLeft() {
+  setpointA = -500;
+  setpointB = 500;
+  setpointC = 500;
+  setpointD = -500;
+}
+
+void moveRight() {
+  setpointA = 500;
+  setpointB = -500;
+  setpointC = -500;
+  setpointD = 500;
+}
+
+void turnLeft() {
+  setpointA = -500;
+  setpointB = 500;
+  setpointC = -500;
+  setpointD = 500;
+}
+
+void turnRight() {
+  setpointA = 500;
+  setpointB = -500;
+  setpointC = 500;
+  setpointD = -500;
+}
+
+void stopMotors() {
+  setpointA = 0;
+  setpointB = 0;
+  setpointC = 0;
+  setpointD = 0;
+}
+
+void setMotorA(double speed) {
+  if (speed >= 0) {
+    digitalWrite(DIRA1, HIGH);
+    digitalWrite(DIRA2, LOW);
+  } else {
+    digitalWrite(DIRA1, LOW);
+    digitalWrite(DIRA2, HIGH);
+    speed = -speed;
+  }
+  analogWrite(PWMA, speed);
+}
+
+void setMotorB(double speed) {
+  if (speed >= 0) {
+    digitalWrite(DIRB1, HIGH);
+    digitalWrite(DIRB2, LOW);
+  } else {
+    digitalWrite(DIRB1, LOW);
+    digitalWrite(DIRB2, HIGH);
+    speed = -speed;
+  }
+  analogWrite(PWMB, speed);
+}
+
+void setMotorC(double speed) {
+  if (speed >= 0) {
+    digitalWrite(DIRC1, HIGH);
+    digitalWrite(DIRC2, LOW);
+  } else {
+    digitalWrite(DIRC1, LOW);
+    digitalWrite(DIRC2, HIGH);
+    speed = -speed;
+  }
+  analogWrite(PWMC, speed);
+}
+
+void setMotorD(double speed) {
+  if (speed >= 0) {
+    digitalWrite(DIRD1, HIGH);
+    digitalWrite(DIRD2, LOW);
+  } else {
+    digitalWrite(DIRD1, LOW);
+    digitalWrite(DIRD2, HIGH);
+    speed = -speed;
+  }
+  analogWrite(PWMD, speed);
+}
+
+double calculateDistance() {
+  long pulsesA = abs(motorAEncoder.read());
+  long pulsesB = abs(motorBEncoder.read());
+  long pulsesC = abs(motorCEncoder.read());
+  long pulsesD = abs(motorDEncoder.read());
+
+  long totalPulses = (pulsesA + pulsesB + pulsesC + pulsesD) / 4;
+  return totalPulses * distancePerPulse;
+}
+```
+
+### Updated Python Script on Raspberry Pi
+
+This Python script performs SLAM, detects obstacles, calculates the shortest path to the destination using the A* algorithm, and sends movement commands to the Arduino Mega. It also calculates the distance covered by the robot.
+
+Save the following code as `robot_navigation.py`:
+
+```python
+import serial
+import time
+import numpy as np
+from rplidar import RPLidar
+import math
+import heapq
+
+# Set up RPLidar
+PORT_NAME = '/dev/ttyUSB0'
+lidar = RPLidar(PORT_NAME)
+
+# Set up Serial Communication with Arduino
+ser = serial.Serial('/dev/ttyAMA0', 115200, timeout=1)
+
+def send_command(command):
+    ser.write((command + '\n').encode())
+
+def get_lidar_data():
+    for scan in lidar.iter_scans():
+        yield np.array(scan)
+
+def obstacle_avoidance(scan_data):
+    # Implement obstacle avoidance logic
+    front_data = scan_data[(scan_data[:, 1] > 345) | (scan_data[:, 1] < 15)]  # Front region
+    front_distances = front_data[:, 2]
+    if len(front_distances) > 0 and np.min(front_distances) < 500:  # If an obstacle is closer than 500 mm
+        send_command('STOP')
+        time.sleep
+
+(1)
+        send_command('TURN_LEFT')
+    else:
+        send_command('MOVE_FORWARD')
+
+def astar_pathfinding(start, goal, obstacles):
+    # Implement A* algorithm to find the shortest path from start to goal avoiding obstacles
+    def heuristic(a, b):
+        return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+    open_set = []
+    heapq.heappush(open_set, (0, start))
+    came_from = {}
+    g_score = {start: 0}
+    f_score = {start: heuristic(start, goal)}
+
+    while open_set:
+        current = heapq.heappop(open_set)[1]
+        if current == goal:
+            path = []
+            while current in came_from:
+                path.append(current)
+                current = came_from[current]
+            return path[::-1]  # Return reversed path
+
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # 4 possible directions
+            neighbor = (current[0] + dx, current[1] + dy)
+            tentative_g_score = g_score[current] + 1
+            if neighbor in obstacles or tentative_g_score >= g_score.get(neighbor, float('inf')):
+                continue
+            if tentative_g_score < g_score.get(neighbor, float('inf')):
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g_score
+                f_score[neighbor] = tentative_g_score + heuristic(neighbor, goal)
+                heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+    return []
+
+def navigate_to_point(start, goal, obstacles):
+    path = astar_pathfinding(start, goal, obstacles)
+    for point in path:
+        direction = calculate_direction(start, point)
+        send_command(direction)
+        start = point
+        time.sleep(1)  # Wait for the robot to move
+
+def calculate_direction(current, next_point):
+    if next_point[0] > current[0]:
+        return 'MOVE_RIGHT'
+    elif next_point[0] < current[0]:
+        return 'MOVE_LEFT'
+    elif next_point[1] > current[1]:
+        return 'MOVE_FORWARD'
+    elif next_point[1] < current[1]:
+        return 'MOVE_BACKWARD'
+    return 'STOP'
+
+def read_distance_covered():
+    ser.write('READ_DISTANCE\n'.encode())
+    distance_covered = ser.readline().decode().strip()
+    return float(distance_covered.split(' ')[1])
+
+def main():
+    try:
+        start = (0, 0)  # Initial position
+        goal = (10, 10)  # Target position
+        obstacles = set()
+
+        for scan_data in get_lidar_data():
+            obstacles.update((x, y) for (_, angle, distance) in scan_data if distance < 500)
+            navigate_to_point(start, goal, obstacles)
+            distance_covered = read_distance_covered()
+            print(f"Distance covered: {distance_covered} meters")
+    except KeyboardInterrupt:
+        print('Stopping...')
+    finally:
+        lidar.stop()
+        lidar.disconnect()
+        ser.close()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Running the System
+
+**1. Start ROS and Hector SLAM:**
+```bash
+roslaunch rplidar_ros view_rplidar.launch
+roslaunch hector_slam_launch tutorial.launch
+```
+
+**2. Run the Python Script:**
+```bash
+python3 robot_navigation.py
+```
