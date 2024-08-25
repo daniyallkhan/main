@@ -1,0 +1,80 @@
+5.2 Installing ROS Noetic
+
+1. Connect to the Raspberry Pi via SSH:
+     ssh username@raspberrypi_ip_address
+2. Install ROS Noetic:
+sudo apt update && sudo apt upgrade
+sudo apt install curl gnupg2 lsb-release
+curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+sudo apt update
+sudo apt install ros-noetic-desktop-full 
+
+3. Initialize rosdep:
+     sudo rosdep init
+     rosdep update
+    
+
+4. Setup Environment:
+     echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
+     source ~/.bashrc
+
+ 5.3 Setting up the ROS Workspace and Packages
+
+1. Create the Workspace:
+     mkdir -p ~/catkin_ws/src
+     cd ~/catkin_ws/src
+     catkin_init_workspace
+     
+2. Clone and Build the Packages:
+     cd ~/catkin_ws/src
+     git clone https://github.com/ros-perception/slam_gmapping.git
+     git clone https://github.com/Slamtec/rplidar_ros.git
+     cd ~/catkin_ws
+     catkin_make
+
+
+6. System Integration and Operation
+6.1 Configuring the ROS Environment
+
+Ensure that the ROS environment is properly set up by adding source commands to your `.bashrc` file:
+echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+
+
+6.2 Editing and Launching the Launch Files
+
+1. Edit the Launch File:
+     <!-- File: ~/catkin_ws/src/rplidar_ros/launch/rplidar_gmapping.launch -->
+     <launch>
+       <node name="rplidarNode" pkg="rplidar_ros" type="rplidarNode" output="screen">
+         <param name="serial_port" value="/dev/ttyUSB0"/>
+         <param name="serial_baudrate" value="115200"/>
+         <param name="frame_id" value="laser_frame"/>
+         <param name="angle_compensate" value="true"/>
+       </node>
+
+       <node name="slam_gmapping" pkg="gmapping" type="slam_gmapping">
+         <remap from="scan" to "/rplidarNode/scan"/>
+         <param name="base_frame" value="base_link"/>
+         <param name="odom_frame" value="odom"/>
+       </node>
+     </launch>
+   
+
+2. Launch the System:
+  
+     roslaunch rplidar_ros rplidar_gmapping.launch
+     
+ 6.3 Saving the SLAM Map
+
+Once you are satisfied with the SLAM map, you can save it using the `map_saver` utility provided by the `map_server` package:
+
+1. Install map_server if not already installed:
+   
+     sudo apt install ros-noetic-map-server
+
+2. Save the map:
+   In a new terminal window, use the following command to save the map:
+     rosrun map_server map_saver -f ~/map
+   This will save the map as `map.pgm` and `map.yaml` files in your home directory.
